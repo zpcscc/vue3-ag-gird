@@ -37,6 +37,7 @@
         placeholder="请输入需要搜索的内容"
       />
     </div>
+    <div>当前行数：{{ rowCount }}</div>
     <ag-grid-vue
       style="width: 80vw; height: 500px"
       class="ag-theme-alpine"
@@ -194,6 +195,7 @@ const columnDefs: Ref<(ColDef | ColGroupDef)[]> = ref([])
 // 初始化行的数据
 const rowData: Ref<RowDataType[]> = ref([])
 const searchValue = ref('')
+const rowCount = ref(0)
 const store = useStore()
 
 // 挂载前
@@ -352,15 +354,24 @@ const onQuickFilterChanged = (event: KeyboardEvent | any) => {
   gridApi.value?.redrawRows()
 }
 
+// 计算行数
+const calculateRowCount = () => {
+  if (gridApi.value && rowData) {
+    rowCount.value = rowData.value.length
+  }
+}
+
 // 以下是一些常用ag-grid事件
 // 网格已经初始化时触发，大部分api可调用。（此时可能没有显示完全）
 const onGridReady = (params: GridReadyEvent) => {
   gridApi.value = params.api
   gridApi.value.sizeColumnsToFit()
+  calculateRowCount()
 }
 // 显示的行已更改。排序、筛选或树展开后触发
 const onModelUpdated = (event: ModelUpdatedEvent) => {
   // console.log('onModelUpdated: ', event)
+  calculateRowCount()
 }
 // 单击单元时触发
 const onCellClicked = (event: CellClickedEvent) => {
