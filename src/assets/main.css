@@ -27,3 +27,7 @@ body {
   display: flex;
   place-items: center;
 }
+
+.ag-watermark {
+  display: none;
+}
