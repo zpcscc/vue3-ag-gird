@@ -7,7 +7,7 @@ export interface RowDataType {
     windows: boolean
     css: boolean
   }
-  dob: Date
+  date: Date
   address: string
   years: number
   proficiency: number

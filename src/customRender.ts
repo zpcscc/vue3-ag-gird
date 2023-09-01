@@ -1,12 +1,13 @@
 import RefData from './data/refData'
+import { textHighlight } from './utils'
 
 // 自定义渲染国家列视图
-export const countryCellRenderer = (params: { value: string }) => {
+export const countryCellRenderer = (params: { value: string }, searchValue: string) => {
   const flag =
     "<img border='0' width='15' height='10' style='margin-bottom: 2px' src='https://www.ag-grid.com/example-assets/flags/" +
     (RefData.COUNTRY_CODES as any)[params.value] +
     ".png'>"
-  return flag + ' ' + params.value
+  return flag + ' ' + textHighlight(params.value, searchValue)
 }
 
 // 自定义渲染技能列视图

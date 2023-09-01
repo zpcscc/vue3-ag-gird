@@ -14,26 +14,29 @@
           class="btn btn-primary mx-1"
           @click="gridOptions.columnApi?.setColumnVisible('country', false)"
         >
-          隐藏country列
+          隐藏国家列
         </button>
         <button
           class="btn btn-primary mx-1"
           @click="gridOptions.columnApi?.setColumnVisible('country', true)"
         >
-          显示country列
+          显示国家列
         </button>
       </span>
     </div>
     <div class="btn-toolbar d-flex align-items-center py-2">
       <button class="btn btn-primary mx-1" @click="createRowData()">刷新数据</button>
     </div>
-    <input
-      class="mr-2 form-control d-inline-block"
-      @keyup="onQuickFilterChanged"
-      type="text"
-      id="quickFilterInput"
-      placeholder="全局搜索"
-    />
+    <div>
+      全局搜索：
+      <input
+        class="mr-2 form-control d-inline-block"
+        @keyup="onQuickFilterChanged"
+        type="text"
+        id="quickFilterInput"
+        placeholder="请输入需要搜索的内容"
+      />
+    </div>
     <ag-grid-vue
       style="width: 80vw; height: 500px"
       class="ag-theme-alpine"
@@ -45,7 +48,8 @@
       :modules="modules"
       :animateRows="true"
       :enableRangeSelection="true"
-      :sideBar="true"
+      :sideBar="false"
+      :suppressClickEdit="true"
       @grid-ready="onGridReady"
       @model-updated="onModelUpdated"
       @cell-clicked="onCellClicked"
@@ -69,10 +73,20 @@
     >
     </ag-grid-vue>
   </div>
+  <el-dialog
+    v-model="store.dialogVisible"
+    title="编辑"
+    width="30%"
+    :before-close="handleClose"
+    append-to-body
+    destroy-on-close
+  >
+    <EditorForm />
+  </el-dialog>
 </template>
 
 <script setup lang="ts">
-import { ref, onBeforeMount } from 'vue'
+import { ref, onBeforeMount, provide } from 'vue'
 import type { Ref } from 'vue'
 import type {
   GridOptions,
@@ -102,11 +116,13 @@ import 'ag-grid-community/styles/ag-grid.css'
 import 'ag-grid-community/styles/ag-theme-alpine.css'
 import DateComponent from '../components/DateComponent.vue'
 import HeaderGroupComponent from '../components/HeaderGroupComponent.vue'
+import OperatorComponent from '../components/OperatorComponent.vue'
+import EditorForm from '../components/EditorForm.vue'
 import RefData from '../data/refData'
-import { createRandomPhoneNumber, pad } from '../utils'
+import { createRandomPhoneNumber, pad, textHighlight } from '../utils'
 import type { RowDataType } from '../type'
 import { countryCellRenderer, skillsCellRenderer, percentCellRenderer } from '../customRender'
-
+import { useStore } from '../store'
 // 全局引入企业版所有功能。待熟悉下列模块后，改为按需引入。
 import 'ag-grid-enterprise'
 
@@ -172,11 +188,13 @@ const defaultColDef: ColDef = {
 }
 const gridApi: Ref<GridApi | null> = ref(null)
 const gridOptions: Ref<GridOptions> = ref({})
+provide('gridOptions', gridOptions)
 // 初始化每列的数据
 const columnDefs: Ref<(ColDef | ColGroupDef)[]> = ref([])
 // 初始化行的数据
 const rowData: Ref<RowDataType[]> = ref([])
-const rowCount = ref('')
+const searchValue = ref('')
+const store = useStore()
 
 // 挂载前
 onBeforeMount(() => {
@@ -184,6 +202,12 @@ onBeforeMount(() => {
   createRowData()
   createColumnDefs()
 })
+
+const highlightCellRender = (params: any) => textHighlight(params.value, searchValue.value)
+
+const handleClose = () => {
+  store.closeEditForm()
+}
 
 // 每列的配置
 const createColumnDefs = () => {
@@ -206,28 +230,39 @@ const createColumnDefs = () => {
           field: 'name',
           editable: true,
           width: 150,
-          pinned: true
+          pinned: true,
+          cellRenderer: highlightCellRender
+        },
+        {
+          headerName: '年龄',
+          field: 'years',
+          editable: true,
+          width: 150,
+          pinned: true,
+          cellRenderer: highlightCellRender
         },
         {
           headerName: '国家',
           field: 'country',
           width: 150,
-          cellRenderer: countryCellRenderer,
+          cellRenderer: (params: any) => countryCellRenderer(params, searchValue.value),
           pinned: true,
-          filterParams: { cellRenderer: countryCellRenderer, cellHeight: 20 }
+          filterParams: {
+            cellRenderer: (params: any) => countryCellRenderer(params, searchValue.value),
+            cellHeight: 20
+          }
         },
         {
           headerName: 'DOB',
-          field: 'dob',
+          field: 'date',
           width: 120,
+          editable: true,
           pinned: true,
           cellRenderer: (params: any) => {
-            return (
-              pad(params.value.getDate(), 2) +
-              '/' +
-              pad(params.value.getMonth() + 1, 2) +
-              '/' +
-              params.value.getFullYear()
+            const date = new Date(params.value)
+            return textHighlight(
+              `${date.getFullYear()}/${pad(date.getMonth() + 1, 2)}/${pad(date.getDate(), 2)}`,
+              searchValue.value
             )
           },
           filter: 'agDateColumnFilter',
@@ -256,19 +291,25 @@ const createColumnDefs = () => {
       headerName: '联系方式',
       children: [
         {
-          headerName: '手机',
-          field: 'mobile',
-          width: 150,
-          filter: 'text'
-        },
-        {
           headerName: '固定电话',
           field: 'landline',
           width: 150,
-          filter: 'text'
+          filter: 'text',
+          cellRenderer: highlightCellRender
         },
-        { headerName: '地址', field: 'address', width: 500, filter: 'text' }
+        {
+          headerName: '地址',
+          field: 'address',
+          width: 500,
+          filter: 'text',
+          cellRenderer: highlightCellRender
+        }
       ]
+    },
+    {
+      headerName: '操作',
+      width: 150,
+      cellRenderer: OperatorComponent
     }
   ]
 }
@@ -276,7 +317,7 @@ const createColumnDefs = () => {
 // 创建每行的数据
 const createRowData = () => {
   rowData.value = []
-  for (let i = 0; i < 200; i++) {
+  for (let i = 0; i < 10000; i++) {
     const countryData = RefData.COUNTRIES[i % RefData.COUNTRIES.length]
     rowData.value.push({
       name:
@@ -290,7 +331,7 @@ const createRowData = () => {
         windows: Math.random() < 0.4,
         css: Math.random() < 0.4
       },
-      dob: RefData.DOBs[i % RefData.DOBs.length],
+      date: RefData.DOBs[i % RefData.DOBs.length],
       address: RefData.ADDRESSES[i % RefData.ADDRESSES.length],
       years: Math.round(Math.random() * 100),
       proficiency: Math.round(Math.random() * 100),
@@ -303,108 +344,103 @@ const createRowData = () => {
   }
 }
 
-// 计算行数
-const calculateRowCount = () => {
-  if (gridApi.value && rowData) {
-    let model = gridOptions.value?.api?.getModel()
-    let totalRows = rowData.value.length
-    let processedRows = model?.getRowCount()
-    rowCount.value = processedRows?.toLocaleString() + ' / ' + totalRows.toLocaleString()
-  }
-}
-
 // 快速筛选过滤
 const onQuickFilterChanged = (event: KeyboardEvent | any) => {
-  gridApi.value?.setQuickFilter(event.target?.value)
+  const value = event.target?.value
+  searchValue.value = value
+  gridApi.value?.setQuickFilter(value)
+  gridApi.value?.redrawRows()
 }
 
 // 以下是一些常用ag-grid事件
 // 网格已经初始化时触发，大部分api可调用。（此时可能没有显示完全）
 const onGridReady = (params: GridReadyEvent) => {
   gridApi.value = params.api
-  calculateRowCount()
   gridApi.value.sizeColumnsToFit()
 }
 // 显示的行已更改。排序、筛选或树展开后触发
 const onModelUpdated = (event: ModelUpdatedEvent) => {
-  console.log('onModelUpdated: ', event)
-  calculateRowCount()
+  // console.log('onModelUpdated: ', event)
 }
 // 单击单元时触发
 const onCellClicked = (event: CellClickedEvent) => {
-  console.log('onCellClicked', event)
+  // console.log('onCellClicked', event)
 }
 // 双击单元时触发
 const onCellDoubleClicked = (event: ModelUpdatedEvent) => {
-  console.log('onCellDoubleClicked: ', event)
+  // console.log('onCellDoubleClicked: ', event)
 }
 // 右击单元时触发
 const onCellContextMenu = (event: CellContextMenuEvent) => {
-  console.log('onCellContextMenu: ', event)
+  // console.log('onCellContextMenu: ', event)
 }
 // 单元数据改变后，粘贴等数据改变后触发
 const onCellValueChanged = (event: CellValueChangedEvent) => {
-  console.log('onCellValueChanged: ', event)
+  // console.log('onCellValueChanged: ', event)
 }
 // 单元聚焦时触发
 const onCellFocused = (event: CellFocusedEvent) => {
-  console.log('onCellFocused: ', event)
+  // console.log('onCellFocused: ', event)
 }
 // 行被选中或取消选中时触发
 const onRowSelected = (event: RowSelectedEvent) => {
-  console.log('onRowSelected: ', event)
+  // console.log('onRowSelected: ', event)
 }
 // 选中行更改时触发
 const onSelectionChanged = (event: SelectionChangedEvent) => {
-  console.log('onSelectionChanged: ', event)
+  // console.log('onSelectionChanged: ', event)
 }
 // 筛选过滤，已修改，但未点击“确认”时触发
 const onFilterModified = (event: FilterModifiedEvent) => {
-  console.log('onFilterModified: ', event)
+  // console.log('onFilterModified: ', event)
 }
 // 虚拟列表行删除时触发。
 const onVirtualRowRemoved = (event: VirtualRowRemovedEvent) => {
-  console.log('onVirtualRowRemoved: ', event)
+  // console.log('onVirtualRowRemoved: ', event)
 }
 // 点击行时触发
 const onRowClicked = (event: RowClickedEvent) => {
-  console.log('onRowClicked: ', event)
+  // console.log('onRowClicked: ', event)
 }
 // 列有任何更改时触发
 const onColumnEverythingChanged = (event: ColumnEverythingChangedEvent) => {
-  console.log('onColumnEverythingChanged: ', event)
+  // console.log('onColumnEverythingChanged: ', event)
 }
 // 添加或删除了行、列时触发
 const onColumnRowGroupChanged = (event: ColumnRowGroupChangedEvent) => {
-  console.log('onColumnRowGroupChanged: ', event)
+  // console.log('onColumnRowGroupChanged: ', event)
 }
 // 当前列的数据，添加或删除时触发
 const onColumnValueChanged = (event: ColumnValueChangedEvent) => {
-  console.log('onColumnValueChanged: ', event)
+  // console.log('onColumnValueChanged: ', event)
 }
 // 列移动时触发
 const onColumnMoved = (event: ColumnValueChangedEvent) => {
-  console.log('onColumnMoved: ', event)
+  // console.log('onColumnMoved: ', event)
 }
 // 列显示隐藏时触发
 const onColumnVisible = (event: ColumnVisibleEvent) => {
-  console.log('onColumnVisible: ', event)
+  // console.log('onColumnVisible: ', event)
 }
 // 列组打开关闭时触发
 const onColumnGroupOpened = (event: ColumnGroupOpenedEvent) => {
-  console.log('onColumnGroupOpened: ', event)
+  // console.log('onColumnGroupOpened: ', event)
 }
 // 列的大小发生变化时触发
 const onColumnResized = (event: ColumnResizedEvent) => {
-  console.log('onColumnResized: ', event)
+  // console.log('onColumnResized: ', event)
 }
 // 固定或取消列时触发
 const onColumnPinned = (event: ColumnResizedEvent) => {
-  console.log('onColumnPinned: ', event)
+  // console.log('onColumnPinned: ', event)
 }
 </script>
 
-<style>
+<style lang="scss">
+.highlight {
+  color: rgb(250, 158, 50);
+}
+
 .ag-grid-container {
   min-height: 60vh;
 }

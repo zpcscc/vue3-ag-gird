@@ -29,7 +29,6 @@ const expandOrCollapse = () => {
 }
 
 const onExpandChanged = () => {
-  console.log(params)
   expanded.value = params.columnGroup?.getProvidedColumnGroup()?.isExpanded()
 }
 
