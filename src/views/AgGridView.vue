@@ -8,24 +8,6 @@
           取消全选
         </button>
       </span>
-      <span style="margin-left: 20px">
-        Column API:
-        <button
-          class="btn btn-primary mx-1"
-          @click="gridOptions.columnApi?.setColumnVisible('country', false)"
-        >
-          隐藏国家列
-        </button>
-        <button
-          class="btn btn-primary mx-1"
-          @click="gridOptions.columnApi?.setColumnVisible('country', true)"
-        >
-          显示国家列
-        </button>
-      </span>
-    </div>
-    <div class="btn-toolbar d-flex align-items-center py-2">
-      <button class="btn btn-primary mx-1" @click="createRowData()">刷新数据</button>
     </div>
     <div>
       全局搜索：
@@ -37,7 +19,6 @@
         placeholder="请输入需要搜索的内容"
       />
     </div>
-    <div>当前行数：{{ rowCount }}</div>
     <ag-grid-vue
       style="width: 80vw; height: 500px"
       class="ag-theme-alpine"
@@ -51,6 +32,7 @@
       :enableRangeSelection="true"
       :sideBar="false"
       :suppressClickEdit="true"
+      rowModelType="serverSide"
       @grid-ready="onGridReady"
       @model-updated="onModelUpdated"
       @cell-clicked="onCellClicked"
@@ -135,6 +117,7 @@ import { MenuModule } from '@ag-grid-enterprise/menu'
 import { ClientSideRowModelModule } from '@ag-grid-community/client-side-row-model'
 import { CsvExportModule } from '@ag-grid-community/csv-export'
 import { RangeSelectionModule } from '@ag-grid-enterprise/range-selection'
+import { ServerSideRowModelModule } from '@ag-grid-enterprise/server-side-row-model'
 // import { GridChartsModule } from '@ag-grid-enterprise/charts'
 // import { SparklinesModule } from '@ag-grid-enterprise/sparklines'
 // import { ColumnsToolPanelModule } from '@ag-grid-enterprise/column-tool-panel'
@@ -142,7 +125,6 @@ import { RangeSelectionModule } from '@ag-grid-enterprise/range-selection'
 // import { MasterDetailModule } from '@ag-grid-enterprise/master-detail'
 // import { RichSelectModule } from '@ag-grid-enterprise/rich-select'
 // import { RowGroupingModule } from '@ag-grid-enterprise/row-grouping'
-// import { ServerSideRowModelModule } from '@ag-grid-enterprise/server-side-row-model'
 // import { SetFilterModule } from '@ag-grid-enterprise/set-filter'
 // import { MultiFilterModule } from '@ag-grid-enterprise/multi-filter'
 // import { AdvancedFilterModule } from '@ag-grid-enterprise/advanced-filter'
@@ -162,7 +144,9 @@ const modules = [
   // 右键菜单剪切板
   ClipboardModule,
   // 单元格范围选择模块
-  RangeSelectionModule
+  RangeSelectionModule,
+  // 服务端加载数据
+  ServerSideRowModelModule
   // SideBarModule
   // FiltersToolPanelModule,
   // SparklinesModule,
@@ -171,7 +155,6 @@ const modules = [
   // MultiFilterModule,
   // RichSelectModule,
   // RowGroupingModule,
-  // ServerSideRowModelModule,
   // SetFilterModule,
   // StatusBarModule,
   // ViewportRowModelModule,
@@ -188,6 +171,7 @@ const defaultColDef: ColDef = {
   flex: 1
 }
 const gridApi: Ref<GridApi | null> = ref(null)
+const gridColumnApi = ref({})
 const gridOptions: Ref<GridOptions> = ref({})
 provide('gridOptions', gridOptions)
 // 初始化每列的数据
@@ -195,18 +179,18 @@ const columnDefs: Ref<(ColDef | ColGroupDef)[]> = ref([])
 // 初始化行的数据
 const rowData: Ref<RowDataType[]> = ref([])
 const searchValue = ref('')
-const rowCount = ref(0)
 const store = useStore()
 
 // 挂载前
 onBeforeMount(() => {
   gridOptions.value.components = { agDateInput: DateComponent }
-  createRowData()
   createColumnDefs()
 })
 
+// 高亮搜素自负
 const highlightCellRender = (params: any) => textHighlight(params.value, searchValue.value)
 
+// 关闭编辑表单
 const handleClose = () => {
   store.closeEditForm()
 }
@@ -316,12 +300,12 @@ const createColumnDefs = () => {
   ]
 }
 
-// 创建每行的数据
-const createRowData = () => {
-  rowData.value = []
-  for (let i = 0; i < 10000; i++) {
+const getRowData = (rowNum: number) => {
+  if (!rowNum) rowNum = 100
+  const data = []
+  for (let i = 0; i < rowNum; i++) {
     const countryData = RefData.COUNTRIES[i % RefData.COUNTRIES.length]
-    rowData.value.push({
+    data.push({
       name:
         RefData.FIRST_NAMES[i % RefData.FIRST_NAMES.length] +
         ' ' +
@@ -344,7 +328,9 @@ const createRowData = () => {
       landline: createRandomPhoneNumber()
     })
   }
+  return data
 }
+
 
 // 快速筛选过滤
 const onQuickFilterChanged = (event: KeyboardEvent | any) => {
@@ -354,24 +340,39 @@ const onQuickFilterChanged = (event: KeyboardEvent | any) => {
   gridApi.value?.redrawRows()
 }
 
-// 计算行数
-const calculateRowCount = () => {
-  if (gridApi.value && rowData) {
-    rowCount.value = rowData.value.length
-  }
-}
 
 // 以下是一些常用ag-grid事件
 // 网格已经初始化时触发，大部分api可调用。（此时可能没有显示完全）
 const onGridReady = (params: GridReadyEvent) => {
   gridApi.value = params.api
+  gridColumnApi.value = params.columnApi
   gridApi.value.sizeColumnsToFit()
-  calculateRowCount()
+
+  const updateData = (data: any[]) => {
+    params.api.setServerSideDatasource({
+      getRows: (params) => {
+        const response = {
+          success: true,
+          rows: data.slice(params.request.startRow, params.request.endRow)
+        }
+        // 模拟请求数据的延迟
+        setTimeout(function () {
+          if (response.success) {
+            params.success({ rowData: response.rows })
+          } else {
+            params.fail()
+          }
+        }, 500)
+      }
+    })
+  }
+
+  updateData(getRowData(10000))
 }
+
 // 显示的行已更改。排序、筛选或树展开后触发
 const onModelUpdated = (event: ModelUpdatedEvent) => {
   // console.log('onModelUpdated: ', event)
-  calculateRowCount()
 }
 // 单击单元时触发
 const onCellClicked = (event: CellClickedEvent) => {
